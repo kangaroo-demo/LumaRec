@@ -1,0 +1,24 @@
+# Swift / macOS
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Generated apps, recordings, archives, and the original local workspace
+/dist/
+/work/
+/outputs/
+*.app/
+*.zip
+*.dmg
+*.mov
+*.mp4
+
+# Local configuration and credentials
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.key

@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "LumaRec";
+"NSCameraUsageDescription" = "LumaRec uses your camera to preview and record video locally.";
+"NSMicrophoneUsageDescription" = "LumaRec uses your microphone or virtual audio device to record audio locally.";

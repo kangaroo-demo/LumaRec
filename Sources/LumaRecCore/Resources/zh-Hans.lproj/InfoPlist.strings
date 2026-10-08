@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "LumaRec 流光录";
+"NSCameraUsageDescription" = "LumaRec 使用摄像头在本机预览和录制视频。";
+"NSMicrophoneUsageDescription" = "LumaRec 使用麦克风或虚拟音频设备在本机录制声音。";

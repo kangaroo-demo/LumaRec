@@ -1,0 +1,30 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg
+        run: brew install ffmpeg
+      - name: Test
+        run: swift run LumaRecChecks --require-ffmpeg
+      - name: Build app
+        run: ./scripts/build-app.sh --archive
+      - name: Smoke test packaged resources
+        run: |
+          dist/LumaRec.app/Contents/MacOS/LumaRec --screenshot "$RUNNER_TEMP/lumarec-en.png"
+          dist/LumaRec.app/Contents/MacOS/LumaRec --language zh-Hans --screenshot "$RUNNER_TEMP/lumarec-zh.png"
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumaRec-macOS
+          path: dist/*.zip

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleDisplayName</key><string>LumaRec</string>
+    <key>CFBundleExecutable</key><string>LumaRec</string>
+    <key>CFBundleIconFile</key><string>LumaRecIcon</string>
+    <key>CFBundleIdentifier</key><string>com.kangaroo-demo.LumaRec</string>
+    <key>CFBundleName</key><string>LumaRec</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSCameraUsageDescription</key><string>LumaRec uses your camera to preview and record video locally.</string>
+    <key>NSMicrophoneUsageDescription</key><string>LumaRec uses your microphone or virtual audio device to record audio locally.</string>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>
