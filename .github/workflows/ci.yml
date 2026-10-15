@@ -7,28 +7,24 @@ permissions:
   contents: read
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-14, macos-15-intel]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Host architecture
-        run: uname -m
+        run: test "$(uname -m)" = arm64
       - name: Native media and recovery checks
         run: swift run LumaRecChecks
       - name: Validate bilingual catalogs
         run: python3 scripts/check-localization.py
-      - name: Universal app, ZIP and DMG
-        run: ./scripts/build-app.sh --archive
+      - name: Apple Silicon app, ZIP and DMG
+        run: ./scripts/build-app.sh --archive --native
       - name: Exercise final extracted DMG
-        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.dmg" "$RUNNER_TEMP/dmg-evidence"
+        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.dmg" "$RUNNER_TEMP/dmg-evidence"
       - name: Exercise final extracted ZIP
-        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.zip" "$RUNNER_TEMP/zip-evidence"
+        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.zip" "$RUNNER_TEMP/zip-evidence"
       - uses: actions/upload-artifact@v4
         with:
-          name: LumaRec-macOS-universal-${{ matrix.os }}-candidate
+          name: LumaRec-macOS-arm64-${{ matrix.os }}-candidate
           path: |
             dist/*.zip
             dist/*.dmg

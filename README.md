@@ -9,7 +9,7 @@ LumaRec records your camera and microphone using the media frameworks built into
 
 ## Install
 
-Requires **macOS 13 Ventura or later**, on Apple Silicon or Intel. Version 1.0.0 is currently a release candidate; see the [release handoff](docs/release-handoff.md) for qualification results. A stable release has not yet been published. Candidate DMG/ZIP assets are prepared in the project's release draft for review.
+Requires **macOS 13 Ventura or later**, on **Apple Silicon (arm64)**. Intel is not qualified for this first release and has no download. Version 1.0.0 is currently a release candidate; see the [release handoff](docs/release-handoff.md) for qualification results. A stable release has not yet been published. Candidate DMG/ZIP assets are prepared in the project's release draft for review.
 
 Open the DMG, drag **LumaRec.app** to **Applications**, and open it there. With the ZIP, extract and drag the app to Applications. Allow Camera and Microphone when asked.
 
@@ -44,11 +44,11 @@ Command Line Tools with Swift 5.9+ are required to build; app users do not need 
 
 ```sh
 swift run LumaRecChecks
-./scripts/build-app.sh --archive
-./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.dmg" "$PWD/work/dmg-verification"
+./scripts/build-app.sh --archive --native
+./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.dmg" "$PWD/work/dmg-verification"
 ```
 
-The build compiles each architecture separately, combines them into a universal app, signs locally, and produces DMG, ZIP, build metadata and SHA-256 checksums. No third-party runtime is bundled. [Release procedure](docs/RELEASING.md) covers optional Developer ID signing and notarization. [Contributing](CONTRIBUTING.md) covers testing.
+On an Apple Silicon build Mac, this command produces the arm64 app, signs locally, and creates DMG, ZIP, build metadata and SHA-256 checksums. The optional universal development build is not a qualified first-release download. No third-party runtime is bundled. [Release procedure](docs/RELEASING.md) covers optional Developer ID signing and notarization. [Contributing](CONTRIBUTING.md) covers testing.
 
 Automated tests generate and decode synthetic media with Apple's frameworks. Final-package verification runs the extracted app with an empty inherited environment and only system PATH. Hardware capture, audible playback/lip-sync and the downloaded app's first-open approval are reported separately; synthetic checks are not camera acceptance.
 

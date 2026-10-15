@@ -4,13 +4,13 @@ Use macOS 13+ with Swift 5.9+ Command Line Tools. No package manager or FFmpeg i
 
 ```sh
 swift run LumaRecChecks
-./scripts/build-app.sh --archive
-./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.zip" "$PWD/work/zip-verification"
+./scripts/build-app.sh --archive --native
+./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.zip" "$PWD/work/zip-verification"
 ```
 
 `Sources/LumaRec` contains AppKit UI and camera capture. `Sources/LumaRecCore` contains native export,
 recording recovery, localization, device discovery, synthetic qualification and actual-output inspection.
-`Tests/LumaRecChecks` runs checks without XCTest or full Xcode. Packaging works with Command Line Tools.
+`Tests/LumaRecChecks` runs checks without XCTest or full Xcode. Packaging works with Command Line Tools. The first release is arm64 only; run release builds on Apple Silicon. Universal/Intel development builds are not qualified downloads.
 
 The extracted app's `--verify-export /absolute/new-directory` flag generates synthetic media and exercises
 its actual exporter, without opening a camera. `--screenshot /absolute/file.png --language en` (or `zh-Hans`)

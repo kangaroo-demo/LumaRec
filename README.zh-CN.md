@@ -9,7 +9,7 @@ LumaRec 使用 macOS 自带媒体框架录制摄像头和麦克风。**使用应
 
 ## 安装
 
-支持 **macOS 13 Ventura 及更新版本**，兼容 Apple 芯片和 Intel。1.0.0 目前为候选版本，验收结果见[发布交接记录](docs/release-handoff.md)。尚未发布公开稳定版，DMG/ZIP 候选包已准备在项目 Release 草稿中供复核。
+支持 **macOS 13 Ventura 及更新版本**，首版仅提供 **Apple 芯片（arm64）**下载。Intel 尚未完成验收，暂无下载。1.0.0 目前为候选版本，验收结果见[发布交接记录](docs/release-handoff.md)。尚未发布公开稳定版，DMG/ZIP 候选包已准备在项目 Release 草稿中供复核。
 
 打开 DMG，将 **LumaRec.app** 拖入**应用程序**，再从那里打开。使用 ZIP 时，先解压，再将应用拖入“应用程序”。系统询问时允许摄像头和麦克风访问。
 
@@ -44,11 +44,11 @@ LumaRec 使用 macOS 自带媒体框架录制摄像头和麦克风。**使用应
 
 ```sh
 swift run LumaRecChecks
-./scripts/build-app.sh --archive
-./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.dmg" "$PWD/work/dmg-verification"
+./scripts/build-app.sh --archive --native
+./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.dmg" "$PWD/work/dmg-verification"
 ```
 
-脚本分别编译两种架构后合成为通用应用，执行本地签名，并产出 DMG、ZIP、构建信息和 SHA-256。无第三方运行组件。可选 Developer ID 签名和公证流程见[发布说明](docs/RELEASING.md)，开发约定见[参与贡献](CONTRIBUTING.md)。
+在 Apple 芯片 Mac 上，此命令构建 arm64 应用，执行本地签名，并产出 DMG、ZIP、构建信息和 SHA-256。可选的通用开发构建不作为首版已验收下载。无第三方运行组件。可选 Developer ID 签名和公证流程见[发布说明](docs/RELEASING.md)，开发约定见[参与贡献](CONTRIBUTING.md)。
 
 自动测试使用 Apple 框架生成并解码合成素材。最终包验证在剥离继承环境、仅保留系统 PATH 的条件下运行解包后的应用。硬件录制、可听声音与口型同步，以及下载后首次允许打开，均单独报告；合成测试不等于摄像头验收。
 

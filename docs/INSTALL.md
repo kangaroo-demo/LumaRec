@@ -1,6 +1,6 @@
 LumaRec 1.0.0 — Installation / 安装说明
 
-macOS 13 Ventura or later. Universal: Apple Silicon and Intel.
+macOS 13 Ventura or later. Apple Silicon (arm64) only. Intel is not qualified and has no first-release download.
 No Homebrew, FFmpeg, Xcode, terminal, account, or internet connection is needed to record/export.
 
 This candidate is locally (ad hoc) signed and is NOT Apple Developer ID signed or notarized.
@@ -31,7 +31,7 @@ They do not directly record speaker output. Camera + microphone needs no virtual
 
 ────────────────────────────────────────
 
-需要 macOS 13 Ventura 或更新版本；通用应用，支持 Apple 芯片和 Intel。
+需要 macOS 13 Ventura 或更新版本；首版仅提供 Apple 芯片（arm64）应用。Intel 尚未完成验收，暂无下载。
 录制和导出无需 Homebrew、FFmpeg、Xcode、终端、账号或网络。
 
 此候选包仅有本地临时签名，未使用 Apple Developer ID 签名，也未经过 Apple 公证。
