@@ -9,11 +9,11 @@ LumaRec records your camera and microphone using the media frameworks built into
 
 ## Install
 
-Requires **macOS 13 Ventura or later**, on **Apple Silicon (arm64)**. Intel is not qualified for this first release and has no download. Version 1.0.0 is currently a release candidate; see the [release handoff](docs/release-handoff.md) for qualification results. A stable release has not yet been published. Candidate DMG/ZIP assets are prepared in the project's release draft for review.
+Requires **macOS 13 Ventura or later**, on **Apple Silicon (arm64)**. Intel is not qualified for this first release and has no download. The first stable community release, **1.0.0**, is available: [DMG](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.dmg) · [ZIP](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.zip) · [SHA-256 checksums](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt) · [Release notes](https://github.com/kangaroo-demo/LumaRec/releases/tag/v1.0.0). See the [release handoff](docs/release-handoff.md) for qualification results.
 
 Open the DMG, drag **LumaRec.app** to **Applications**, and open it there. With the ZIP, extract and drag the app to Applications. Allow Camera and Microphone when asked.
 
-**This candidate is locally signed, not Apple Developer ID signed or notarized.** macOS may block its first launch. The normal per-app approval is **System Settings → Privacy & Security → Open Anyway**, after dismissing the initial block. Availability depends on macOS and device management policy; this first-open path still needs validation from a downloaded candidate. Do not disable system security or use terminal workarounds. Read the [bilingual offline installation guide](docs/INSTALL.md).
+**This release is locally signed, not Apple Developer ID signed or notarized.** macOS may block its first launch. The normal per-app approval is **System Settings → Privacy & Security → Open Anyway**, after dismissing the initial block. Availability depends on macOS and device management policy. Do not disable system security or use terminal workarounds. Read the [bilingual offline installation guide](docs/INSTALL.md).
 
 ## Record
 

@@ -1,19 +1,21 @@
 # LumaRec 1.0.0 release handoff
 
-## Current delivery — authoritative final candidate
+## Current delivery — published stable 1.0.0
 
-Updated 2026-10-15 (Asia/Shanghai). All earlier universal/7931d81 package hashes and paths below are historical and superseded. **User-facing scope: Apple Silicon (arm64) only**, macOS 13+ deployment target. Intel has no qualified first-release download.
+Updated 2026-10-15 (Asia/Shanghai). **Stable 1.0.0 is publicly available and latest.** All earlier universal/7931d81 package hashes and paths below are historical and superseded. **User-facing scope: Apple Silicon (arm64) only**, macOS 13+ deployment target. Intel has no qualified first-release download.
 
 - Version: **1.0.0**, build **1**.
-- Clean package source and draft target: **`2f3a9ecdcb018a5181fa0a5cbe8014d34cb3a515`**. Metadata has no dirty marker. Subsequent documentation-only commits record verification; they do not change the packaged executable or installer instructions.
-- GitHub draft: https://github.com/kangaroo-demo/LumaRec/releases/tag/untagged-78df242a74c571c321c5 (maintainer access; `v1.0.0`, draft, not prerelease). **No stable public Release has been published.**
+- Clean package source and published tag `v1.0.0`: **`2f3a9ecdcb018a5181fa0a5cbe8014d34cb3a515`**. Metadata has no dirty marker. Subsequent documentation-only commits record verification; they do not change the packaged executable or bundled installer instructions.
+- Public Release: https://github.com/kangaroo-demo/LumaRec/releases/tag/v1.0.0 . Release ID **413460221**, name **LumaRec 1.0.0**, `draft=false`, `prerelease=false`; unauthenticated `/releases/latest` resolves to this release.
+- Published at **2026-10-15T06:11:23Z**, or **2026-10-15 14:11:23 +08:00 (Asia/Shanghai)**.
+- Public installers: [DMG](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.dmg) · [ZIP](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.zip) · [SHA-256 checksums](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt).
 - Runtime: Apple system frameworks and system Swift only. No Homebrew, FFmpeg, Xcode, PATH override, account, network or additional runtime required for camera + microphone recording/export.
 - Signing: ad hoc + hardened runtime + Camera/Audio Input entitlements. **No Developer ID, notarization, ticket or staple.** Automatic Gatekeeper assessment rejects it, as expected. No security mechanism was disabled or quarantine removed.
-- User confirmed no paid Apple Developer account. That alone does not block a disclosed community stable release. The actual remaining gates are normal browser-download/Finder first-open approval and human playback/lip-sync. A concrete one-time acceptance request has been sent in this chat; do not silently treat no reply as a pass.
+- User acceptance and authorization on 2026-10-15: **“通过直接发布正式版本”**. This records the actual release decision without inventing a more specific manual test sequence. No paid Apple Developer account is available; that is a disclosed distribution limitation.
 
 ### Final assets and hashes
 
-All installer assets are under `/Users/donie/onion_space/VobeCodingSpace/LumaRec/dist/` and attached to the draft. Only these arm64 installer names are eligible for website downloads after stable publication.
+All installer assets are under `/Users/donie/onion_space/VobeCodingSpace/LumaRec/dist/` and attached to the public stable release. Only these arm64 installer names are eligible for website downloads. Publication did not rebuild, replace or re-upload the accepted assets.
 
 | Asset | Architecture / role | SHA-256 |
 | --- | --- | --- |
@@ -22,33 +24,45 @@ All installer assets are under `/Users/donie/onion_space/VobeCodingSpace/LumaRec
 | `LumaRec-1.0.0-macOS-arm64-build.txt` | source / architecture / signature metadata | `7dff7e196bc434e67a348cec5db74f2c963e8f8dc5e173551db8ab344162da1e` |
 | `LumaRec-1.0.0-verification.zip` | sanitized logs, static UI screenshots and synthetic samples only | `1085612494e9be2d6a4ed23e617661f74fcf10b275996d2b5339a8cd46590c93` |
 
-GitHub assets were downloaded again using the release API and all installer/build/evidence checksums passed; remote digest fields also match the local artifacts. Also attached: `LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt` and `LumaRec-1.0.0-verification-SHA256.txt`. DMG/ZIP include an Applications shortcut and English/Chinese offline installation instructions. No private hardware recording is in the repository or release.
+All six assets were downloaded again from public download URLs without GitHub credentials or cookies. Their asset IDs, sizes and remote digests match the pre-publication record; all downloaded SHA-256 hashes match the accepted artifacts. Also attached: `LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt` and `LumaRec-1.0.0-verification-SHA256.txt`. DMG/ZIP include an Applications shortcut and English/Chinese offline installation instructions. No private hardware recording is in the repository or release.
+
+The published installers and verification ZIP remain byte-identical to the accepted candidate. Candidate/pending wording inside bundled guides or archived verification records is historical. This handoff, the current repository guides and the public Release page record the final stable status; documentation updates must not rebuild or replace 1.0.0 artifacts.
+
+### Unauthenticated public verification
+
+- Public release HTML, release-by-tag API, latest-release API and tag-reference API each returned HTTP 200. Release ID **413460221** is stable/latest and `v1.0.0` directly points to source **`2f3a9ecdcb018a5181fa0a5cbe8014d34cb3a515`**.
+- All six public asset URLs returned HTTP 200 and downloaded files passed byte-size and SHA-256 checks. No Authorization header, GitHub session, cookies, netrc or CLI credentials were used. Direct GitHub connections were intermittent; individual requests used the existing local HTTP proxy at `127.0.0.1:7897` where needed. No global network settings changed.
+- Durable sanitized results: [public-download-verification.json](evidence/2026-10-15-stable/public-download-verification.json). Raw public JSON/HTML, downloaded assets and checksum results remain under `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/public-release-verification/`. Pre-publication and publication responses remain at `work/release-before-publication.json` and `work/stable-publication-result.json`.
 
 ### Reproducible evidence — source, package and hardware are separate
 
 - Source checks: `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/cfr-source-checks.txt`. Native synthetic generation/encoding/decoding, all quality levels, clockwise portrait pixels, mixed 440/880 Hz tones, silent video, all four corners filled for 4:3 input, deliberately dropped frames resampled to continuous 30 fps, required-audio failure, non-overwrite, invalid media, destination/free-space preflight, persistent rediscovery and recovery export all passed. 122 literal UI/export localization keys and format placeholders passed in both catalogs.
 - **Final DMG extracted-app checks:** `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/delivery-dmg/`. Image integrity, ad hoc signature integrity, arm64 metadata, system dynamic-library closure, actual packaged native export, English and Chinese rendering all passed.
 - **Final ZIP extracted-app checks:** `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/delivery-zip/`. Same packaged native export and UI checks passed. Each check starts the extracted binary under `env -i`, preserving the OS home/temp variables and using only `/usr/bin:/bin:/usr/sbin:/sbin` PATH; all user/provider/FFmpeg environment variables are absent. Homebrew may exist elsewhere on the test Mac, but there is no lookup, subprocess invocation or linked non-system library in the application. This is stronger than source tests, but is not a claim of testing an erased/fresh OS installation.
-- Final package source **GitHub Actions passed on macOS 14 ARM**: https://github.com/kangaroo-demo/LumaRec/actions/runs/38689299177 . Includes source checks, localization, native arm64 packaging, and both extracted final installer checks on that runner. CI-generated package hashes are distinct builds; local delivery hashes above are the release draft's assets.
+- Final package source **GitHub Actions passed on macOS 14 ARM**: https://github.com/kangaroo-demo/LumaRec/actions/runs/38689299177 . Includes source checks, localization, native arm64 packaging, and both extracted final installer checks on that runner. CI-generated package hashes are distinct builds; local delivery hashes above are the published assets.
 - **Actual local hardware, same final ZIP:** `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/delivery-hardware/hardware-result.txt`. The app drove its normal UI actions/delegates with the built-in camera/microphone: record ~2 s, pause 2 s, resume ~2 s, stop and native export. Both track starts 0; output duration 4.350645833 s (callback/poll latency included); 131 decoded video frames; largest video PTS interval 33.333 ms; true missing audio time effectively 0; video/audio end difference **17.3125 ms**; decoded microphone RMS **0.008897905**. Pause was excluded from the output timeline. The final private clip and original remain only in this local directory. This proves hardware capture + nonzero decoded audio/timestamp behavior, **not human lip-sync or audible speech quality**.
 - Private hardware samples from earlier diagnostic attempts remain under `work/hardware-verification`, `work/final-hardware`, and `work/arm64-hardware`; never upload them. Older failures and corrections are recorded below instead of being presented as passes.
 - Public evidence directory before ZIP: `/Users/donie/onion_space/VobeCodingSpace/LumaRec/work/release-evidence/`. Its only media files are generated color-pattern/sine-tone MP4s; hardware evidence is a numeric text summary with no device IDs, personal paths or camera images.
 
-### One-time human acceptance and publication
+### User acceptance and coverage limits
 
-The user has been asked to use a browser to download the final arm64 DMG from the draft, drag it to Applications, open through Finder, and use only macOS's normal per-app **Privacy & Security → Open Anyway** approval if blocked. Then record speech, pause/resume and play the MP4 to confirm no added black borders and normal audio/lip-sync. Do not claim this was tested by launching the unquarantined command-line binary. No Apple account purchase or terminal/security workaround is requested.
+The earlier acceptance request covered normal downloaded-app first-open and playback. The user's actual response was **“通过直接发布正式版本”**, accepting the release and authorizing publication. This decision is recorded separately from the automated and hardware measurements above. It does not establish a detailed account of the user's installation path, speech recording or lip-sync review. A command-line launch of an unquarantined app also does not establish downloaded first-open behavior.
 
-After this passes, a stable community Release may be published with the unsigned/unnotarized limitation clearly stated. Do not offer a universal/Intel download. Additional unexecuted physical tests are explicit coverage limits: macOS 13 hardware, permission-denial recovery, physical hot-unplug, stop while paused, long capture and controlled low-space volume. Automated preflight tests do not substitute for those physical cases. See `docs/acceptance-checklist.md`.
+The stable community Release is published with the ad hoc signature/unnotarized limitation stated. Additional unexecuted physical tests remain coverage limits, not pending publication gates: macOS 13 hardware, permission-denial recovery, physical hot-unplug, stop while paused, long capture and controlled low-space volume. Automated preflight tests do not substitute for those physical cases. See `docs/acceptance-checklist.md`.
 
 ### Website facts
 
-Until the draft is published: say **“Apple Silicon installer candidate ready; awaiting first-open and playback acceptance”**. Do not say stable 1.0.0 is publicly available or link maintainer-only draft assets as public downloads. The earlier “user must install FFmpeg/Xcode/runtime” description is obsolete. Accurate capabilities: local camera + microphone MP4, pause/resume, silent video, preview/meter, three quality settings, English/Chinese, no runtime setup. Preview and export fill the frame by proportional center crop; edges may be cropped, no added letterbox borders. Optional Input/Mix still needs an existing configured virtual input for speaker audio; native system-output capture is not included.
+Current status: **“LumaRec 1.0.0 stable is publicly available for Apple Silicon.”** Use the public Release and arm64 DMG/ZIP URLs and hashes above. Disclose **not Developer ID signed / not notarized; normal first-open approval may be needed**. Intel has no qualified download.
 
-After publication: use the actual public Release URL and **arm64** DMG/ZIP hashes above, disclose **not Developer ID signed / not notarized, normal first-open approval may be needed**, and list Intel as unavailable. This chat has not changed any `kangaroo-apps` files.
+Capabilities: local camera + microphone MP4, pause/resume, silent video, preview/meter, three quality settings, English/Chinese, no runtime setup. Preview and export use proportional center crop; edges may be cropped. The earlier large-black-border feedback is already covered by the accepted source. Any newly reproduced preview issue belongs to a subsequent version and does not change the accepted 1.0.0 assets. Optional Input/Mix still needs an existing configured virtual input for speaker audio; native system-output capture is not included.
+
+The coordinating chat reports the website's stable downloads updated and 36 browser cases passed; those checks are separate from this repository's release verification. This chat has not edited `kangaroo-apps` or deployed the website.
 
 ---
 
 ## Historical progress (superseded where noted)
+
+Everything below records the candidate stage. Its draft/pending statements, old package paths and instructions to rebuild or replace candidates are historical; the published status and immutable assets above are authoritative.
 
 Updated: 2026-10-15 (Asia/Shanghai). Source baseline: `837d902ad80d3281203988c72b40c19c5c751554`.
 

@@ -1,0 +1,67 @@
+{
+  "checkedAt": "2026-10-15T10:42:21.245238+00:00",
+  "result": "passed",
+  "authentication": "none; curl -q with no Authorization, cookies, netrc or GitHub CLI credentials",
+  "network": "Direct requests were intermittent; five assets used existing local HTTP proxy http://127.0.0.1:7897 for individual curl requests under env -i. ZIP and public page/API checks succeeded directly. No global network configuration changed.",
+  "releaseId": 413460221,
+  "releaseUrl": "https://github.com/kangaroo-demo/LumaRec/releases/tag/v1.0.0",
+  "publishedAt": "2026-10-15T06:11:23Z",
+  "releasePageHttpStatus": 200,
+  "releaseApiHttpStatus": 200,
+  "latestApiHttpStatus": 200,
+  "tagRefHttpStatus": 200,
+  "draft": false,
+  "prerelease": false,
+  "latest": "v1.0.0",
+  "tagCommit": "2f3a9ecdcb018a5181fa0a5cbe8014d34cb3a515",
+  "assets": [
+    {
+      "id": 642847844,
+      "name": "LumaRec-1.0.0-macOS-arm64-build.txt",
+      "httpStatus": 200,
+      "bytes": 289,
+      "sha256": "7dff7e196bc434e67a348cec5db74f2c963e8f8dc5e173551db8ab344162da1e",
+      "matchesAcceptedAsset": true
+    },
+    {
+      "id": 642847840,
+      "name": "LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt",
+      "httpStatus": 200,
+      "bytes": 294,
+      "sha256": "48e79ed4a2bb985f6bffd9fa37defded553ad9fa316611f74f188ae44c3554f5",
+      "matchesAcceptedAsset": true
+    },
+    {
+      "id": 642847839,
+      "name": "LumaRec-1.0.0-macOS-arm64.dmg",
+      "httpStatus": 200,
+      "bytes": 612024,
+      "sha256": "ffa562c7dcaabf6a2295b18a5683e4de09aac73158dfa1a953104def735e3ee9",
+      "matchesAcceptedAsset": true
+    },
+    {
+      "id": 642847838,
+      "name": "LumaRec-1.0.0-macOS-arm64.zip",
+      "httpStatus": 200,
+      "bytes": 357155,
+      "sha256": "4da2901bade5d96f24d78ea93ef5ede38bf5117503a448db58365ad01cb73872",
+      "matchesAcceptedAsset": true
+    },
+    {
+      "id": 642847869,
+      "name": "LumaRec-1.0.0-verification-SHA256.txt",
+      "httpStatus": 200,
+      "bytes": 97,
+      "sha256": "75d857df0d542991b6a08f6dfadf41b854fe4d5ec1d0373b85b294f4438f45cf",
+      "matchesAcceptedAsset": true
+    },
+    {
+      "id": 642847826,
+      "name": "LumaRec-1.0.0-verification.zip",
+      "httpStatus": 200,
+      "bytes": 1047214,
+      "sha256": "1085612494e9be2d6a4ed23e617661f74fcf10b275996d2b5339a8cd46590c93",
+      "matchesAcceptedAsset": true
+    }
+  ]
+}

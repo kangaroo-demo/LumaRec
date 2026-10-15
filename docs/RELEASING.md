@@ -1,7 +1,7 @@
 # Release procedure / 发布流程
 
 Build the first-release arm64 artifacts on an Apple Silicon Mac with macOS 13+ with Swift 5.9+ Command Line Tools. Full Xcode is optional. Normal users need neither.
-Version and build number are in `Resources/Info.plist`; the first intended version is 1.0.0 (build 1).
+Version and build number are in `Resources/Info.plist`; the first published version is 1.0.0 (build 1). See [release handoff](release-handoff.md) for its immutable accepted asset hashes. Do not rebuild or replace the published 1.0.0 artifacts for documentation-only updates.
 
 1. Run `swift run LumaRecChecks` and the localization check in CI. Review capture/recovery changes.
 2. Commit the source first. Build from a clean checkout with `./scripts/build-app.sh --archive --native`.

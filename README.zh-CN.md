@@ -9,11 +9,11 @@ LumaRec 使用 macOS 自带媒体框架录制摄像头和麦克风。**使用应
 
 ## 安装
 
-支持 **macOS 13 Ventura 及更新版本**，首版仅提供 **Apple 芯片（arm64）**下载。Intel 尚未完成验收，暂无下载。1.0.0 目前为候选版本，验收结果见[发布交接记录](docs/release-handoff.md)。尚未发布公开稳定版，DMG/ZIP 候选包已准备在项目 Release 草稿中供复核。
+支持 **macOS 13 Ventura 及更新版本**，首版仅提供 **Apple 芯片（arm64）**下载。Intel 尚未完成验收，暂无下载。首个社区稳定版 **1.0.0** 已发布：[DMG 安装包](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.dmg) · [ZIP](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64.zip) · [SHA-256 校验和](https://github.com/kangaroo-demo/LumaRec/releases/download/v1.0.0/LumaRec-1.0.0-macOS-arm64-SHA256SUMS.txt) · [发布说明](https://github.com/kangaroo-demo/LumaRec/releases/tag/v1.0.0)。验收结果见[发布交接记录](docs/release-handoff.md)。
 
 打开 DMG，将 **LumaRec.app** 拖入**应用程序**，再从那里打开。使用 ZIP 时，先解压，再将应用拖入“应用程序”。系统询问时允许摄像头和麦克风访问。
 
-**此候选包仅有本地临时签名，未使用 Apple Developer ID 签名，也未经过 Apple 公证。** macOS 可能拦截首次启动。关闭初始拦截提示后，正常的单应用允许路径为**系统设置 → 隐私与安全性 → 仍要打开**。此选项是否可用取决于 macOS 版本及设备管理策略，仍需对实际下载包验收。请勿关闭系统安全机制或使用终端绕过。详见[英中离线安装说明](docs/INSTALL.md)。
+**此正式版仅有本地临时签名，未使用 Apple Developer ID 签名，也未经过 Apple 公证。** macOS 可能拦截首次启动。关闭初始拦截提示后，正常的单应用允许路径为**系统设置 → 隐私与安全性 → 仍要打开**。此选项是否可用取决于 macOS 版本及设备管理策略。请勿关闭系统安全机制或使用终端绕过。详见[英中离线安装说明](docs/INSTALL.md)。
 
 ## 录制
 

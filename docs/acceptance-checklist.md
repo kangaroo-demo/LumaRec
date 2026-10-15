@@ -1,5 +1,7 @@
 # Acceptance checklist / 验收清单
 
+Release 1.0.0 acceptance update (2026-10-15): the user accepted the release and authorized stable publication with “通过直接发布正式版本”. This records the user's decision; it does not describe a more specific manual test sequence or mark the detailed physical scenarios below as executed. See [release handoff](release-handoff.md) for the separate automated, hardware and public-download evidence.
+
 Record date, source SHA, package SHA-256, Mac architecture and macOS version for each run.
 Automated pass/fail evidence lives separately from human acceptance. Do not mark unchecked items passed.
 
