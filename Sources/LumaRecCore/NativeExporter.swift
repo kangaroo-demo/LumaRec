@@ -67,19 +67,25 @@ public enum NativeExporter {
         var streams: [(AVAssetReaderOutput, AVAssetWriterInput)] = [(videoOutput, videoInput)]
         let selectedAudio = configuration.mixAudio ? audios : Array(audios.prefix(1))
         if !selectedAudio.isEmpty {
-            let audioOutput = AVAssetReaderAudioMixOutput(audioTracks: selectedAudio, audioSettings: [
+            let pcmSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48_000,
                 AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 32,
                 AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false
-            ])
-            if selectedAudio.count > 1 {
+            ]
+            let audioOutput: AVAssetReaderOutput
+            if selectedAudio.count == 1 {
+                // A single microphone needs decoding, not an offline mixing service.
+                audioOutput = AVAssetReaderTrackOutput(track: selectedAudio[0], outputSettings: pcmSettings)
+            } else {
+                let mixedOutput = AVAssetReaderAudioMixOutput(audioTracks: selectedAudio, audioSettings: pcmSettings)
                 let mix = AVMutableAudioMix()
                 mix.inputParameters = selectedAudio.map { track in
                     let parameters = AVMutableAudioMixInputParameters(track: track)
                     parameters.setVolume(1 / Float(selectedAudio.count), at: .zero)
                     return parameters
                 }
-                audioOutput.audioMix = mix
+                mixedOutput.audioMix = mix
+                audioOutput = mixedOutput
             }
             let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000,

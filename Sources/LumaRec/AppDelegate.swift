@@ -23,6 +23,13 @@ struct CaptureDevice {
     }
 }
 
+// Stable Objective-C notification values also compile with the macOS 14 SDK's Swift importer.
+private enum CaptureNotification {
+    static let disconnected = Notification.Name("AVCaptureDeviceWasDisconnectedNotification")
+    static let runtimeError = Notification.Name("AVCaptureSessionRuntimeErrorNotification")
+    static let interrupted = Notification.Name("AVCaptureSessionWasInterruptedNotification")
+}
+
 private enum DefaultsKey {
     static let outputDirectory = "outputDirectory"
     static let cameraDeviceID = "cameraDeviceID"
@@ -316,8 +323,8 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         movieOutput.minFreeDiskSpaceLimit = 256 * 1024 * 1024
         // Fragment the source so a crash has a better chance of leaving readable media.
         movieOutput.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
-        for name in [AVCaptureDevice.wasDisconnectedNotification, AVCaptureSession.runtimeErrorNotification,
-                     AVCaptureSession.wasInterruptedNotification] {
+        for name in [CaptureNotification.disconnected, CaptureNotification.runtimeError,
+                     CaptureNotification.interrupted] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
                 self?.captureInterrupted(note)
             })
@@ -1443,9 +1450,9 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
 
     private func captureInterrupted(_ notification: Notification) {
         guard !isConfiguring else { return }
-        if notification.name != AVCaptureDevice.wasDisconnectedNotification,
+        if notification.name != CaptureNotification.disconnected,
            notification.object as? AVCaptureSession !== captureSession { return }
-        if notification.name == AVCaptureDevice.wasDisconnectedNotification,
+        if notification.name == CaptureNotification.disconnected,
            let device = notification.object as? AVCaptureDevice,
            !captureSession.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).contains(where: { $0.device.uniqueID == device.uniqueID }) { return }
         isSessionConfigured = false

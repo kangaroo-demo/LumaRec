@@ -15,8 +15,10 @@ trap cleanup EXIT
 case "$artifact" in
     *.zip) ditto -x -k "$artifact" "$work_dir/extracted" ;;
     *.dmg)
-        hdiutil verify "$artifact" > "$evidence/disk-image-integrity.txt"
-        hdiutil attach -readonly -nobrowse -plist "$artifact" > "$work_dir/mount.plist"
+        # Use an identical private copy, so another reviewer's mounted image does not lock this check.
+        cp "$artifact" "$work_dir/package.dmg"
+        hdiutil verify "$work_dir/package.dmg" > "$evidence/disk-image-integrity.txt"
+        hdiutil attach -readonly -nobrowse -plist "$work_dir/package.dmg" > "$work_dir/mount.plist"
         mount_dir="$(/usr/bin/python3 -c 'import plistlib,sys; print(next(e["mount-point"] for e in plistlib.load(open(sys.argv[1],"rb"))["system-entities"] if "mount-point" in e))' "$work_dir/mount.plist")"
         ditto "$mount_dir/LumaRec.app" "$work_dir/extracted/LumaRec.app"
         ;;

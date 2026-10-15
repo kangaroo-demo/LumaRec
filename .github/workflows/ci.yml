@@ -7,9 +7,15 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Host architecture
+        run: uname -m
       - name: Native media and recovery checks
         run: swift run LumaRecChecks
       - name: Validate bilingual catalogs
@@ -22,7 +28,7 @@ jobs:
         run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.zip" "$RUNNER_TEMP/zip-evidence"
       - uses: actions/upload-artifact@v4
         with:
-          name: LumaRec-macOS-universal-candidate
+          name: LumaRec-macOS-universal-${{ matrix.os }}-candidate
           path: |
             dist/*.zip
             dist/*.dmg

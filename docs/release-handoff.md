@@ -60,3 +60,11 @@ Real camera/microphone clips are private local evidence. Never upload them to Gi
 - Latest source checks passed after center-crop change, including decoding a genuine synthetic 4:3 input and checking all four output corners for no added black border, plus required-audio failure for Mic mode. `work/source-checks.txt` records this run.
 - The final draft will attach only installation assets, bilingual notes, synthetic verification samples and sanitized evidence. No private camera clips, device names or personal path logs will be uploaded.
 - Remaining stable publication gates: actual downloaded/quarantined package launch through normal per-app UI approval; human playback/lip-sync review; final clean-package hardware run. Additional macOS 13/Intel physical-machine checks remain an explicit platform coverage limit.
+
+### Compatibility follow-up (supersedes 0e35d7f packages)
+
+- Hosted macOS 14 source/media checks passed, but app compilation exposed SDK-dependent Swift notification member names. Replaced them with the verified stable Objective-C notification string values; no runtime behavior change.
+- Single microphone export now uses AVAssetReaderTrackOutput directly; only actual multi-track mixing invokes Apple's offline mixer. Source media/recovery/localization checks passed again.
+- An extra x86_64-under-Rosetta run on macOS 26.5 crashed inside Apple's CoreAudio `caulk`/offline mixer code (`AQServer`, `AVAssetReaderAudioMixOutput`). This is not an Intel-native pass. Added a native macOS 15 Intel CI job to test the actual Intel runtime separately; macOS 14 ARM CI also remains required. No installed Rosetta or other runtime is required for the Apple Silicon app.
+- The package verifier now mounts its own byte-identical private DMG copy, avoiding image-resource locks during parallel independent review. The 0e35d7f DMG copy passed integrity and extracted-app checks; the resource-busy result was not image corruption.
+- A complete 0e35d7f actual built-in-camera/microphone run passed: 4.3 s output for 4 s active capture plus 2 s pause; starts both 0; 115 video frames; true audio gap ~0; video/audio end difference 7.7 ms; microphone RMS 0.0015215. Final successor packages will rerun hardware capture. Human playback and downloaded first-open still need one-time user acceptance.
