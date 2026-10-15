@@ -118,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
 
+        if ProcessInfo.processInfo.arguments.contains("--hardware-verify") {
+            Task { @MainActor in await controller.verifyHardware() }
+        }
+
         // Render documentation and verify the app bundle without accessing any devices.
         let arguments = ProcessInfo.processInfo.arguments
         if let index = arguments.firstIndex(of: "--screenshot"), arguments.indices.contains(index + 1) {
@@ -194,6 +198,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let helpMenu = NSMenu(title: L("Help"))
         let project = helpMenu.addItem(withTitle: L("Open project on GitHub"), action: #selector(openProject), keyEquivalent: "")
         project.target = self
+        let recover = helpMenu.addItem(withTitle: L("Recover recordings…"), action: #selector(recoverRecordings), keyEquivalent: "")
+        recover.target = self
         helpItem.submenu = helpMenu
         menu.addItem(helpItem)
         NSApp.mainMenu = menu
@@ -211,6 +217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller?.reloadInterface()
         buildMenu()
     }
+
+    @objc private func recoverRecordings() { controller?.recoverRecordings() }
 
     @objc private func openProject() {
         NSWorkspace.shared.open(URL(string: "https://github.com/kangaroo-demo/LumaRec")!)
@@ -234,7 +242,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     private let fileTypePopup = NSPopUpButton()
     private let modePopup = NSPopUpButton()
     private let resolutionPopup = NSPopUpButton()
-    private let audioMode = NSSegmentedControl(labels: [L("System"), L("Mic"), L("Mix")], trackingMode: .selectOne, target: nil, action: nil)
+    private let audioMode = NSSegmentedControl(labels: [L("Input"), L("Mic"), L("Mix"), L("Silent")], trackingMode: .selectOne, target: nil, action: nil)
     private let orientation = NSSegmentedControl(labels: [L("Landscape"), L("Portrait")], trackingMode: .selectOne, target: nil, action: nil)
     private let refreshButton = NSButton(title: L("Refresh devices"), target: nil, action: nil)
     private let startButton = NSButton(title: "", target: nil, action: nil)
@@ -266,22 +274,22 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     private var lastAudioMeterUpdate: TimeInterval = 0
     private var lastObservedAudioLevel: CGFloat = 0
 
-    private var recordingStartedAt: Date?
-    private var pauseStartedAt: Date?
-    private var accumulatedPausedDuration: TimeInterval = 0
     private var isRecordingPaused = false
     private var recordTimer: Timer?
     private var tempMovieURL: URL?
     private var finalMP4URL: URL?
-    private var recordingAudioInputCount = 0
     private var recordingAudioMode = 0
     private var isRecordingInProgress = false
     private var isExporting = false
     private var isConfiguring = false
-    private var exportProcess: Process?
+    private var pendingRecording: PendingRecording?
+    private var observers: [NSObjectProtocol] = []
+    private var recordingHasStarted = false
+    private var recordingActivity: NSObjectProtocol?
+    private var isRefreshing = false
     private var exportConfiguration = ExportConfiguration()
 
-    var isBusy: Bool { isRecordingInProgress || isExporting }
+    var isBusy: Bool { isRecordingInProgress || isExporting || isConfiguring || isRefreshing }
 
     convenience init() {
         let window = NSWindow(
@@ -295,15 +303,31 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         window.appearance = NSAppearance(named: .aqua)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.minSize = NSSize(width: 1280, height: 800)
+        if let available = NSScreen.main?.visibleFrame {
+            let scale = min(1, (available.width - 40) / 1280, (available.height - 60) / 800)
+            window.setContentSize(NSSize(width: 1280 * scale, height: 800 * scale))
+            window.center()
+        }
         self.init(window: window)
         window.delegate = self
         buildUI()
         previewView.previewLayer.session = captureSession
         audioLevelOutput.setSampleBufferDelegate(self, queue: audioLevelQueue)
+        movieOutput.minFreeDiskSpaceLimit = 256 * 1024 * 1024
+        // Fragment the source so a crash has a better chance of leaving readable media.
+        movieOutput.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
+        for name in [AVCaptureDevice.wasDisconnectedNotification, AVCaptureSession.runtimeErrorNotification,
+                     AVCaptureSession.wasInterruptedNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                self?.captureInterrupted(note)
+            })
+        }
         if !ProcessInfo.processInfo.arguments.contains("--screenshot") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                 self?.refreshDevices()
+                if !RecordingStore.pending().isEmpty {
+                    self?.setStatus(L("Recovered recordings are available in Help → Recover recordings."))
+                }
             }
         }
     }
@@ -319,12 +343,16 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     func showBusyAlert() {
-        alert(L("Finish the recording first"), L("Stop recording and wait for MP4 export before changing the language or closing LumaRec."))
+        if isConfiguring || isRefreshing {
+            alert(L("Configuration in progress"), L("Wait for the camera preview to finish starting, then try again."))
+        } else {
+            alert(L("Finish the recording first"), L("Stop recording and wait for MP4 export before changing the language or closing LumaRec."))
+        }
     }
 
     private func buildUI() {
         guard let content = window?.contentView else { return }
-        for (index, title) in [L("System"), L("Mic"), L("Mix")].enumerated() { audioMode.setLabel(title, forSegment: index) }
+        for (index, title) in [L("Input"), L("Mic"), L("Mix"), L("Silent")].enumerated() { audioMode.setLabel(title, forSegment: index) }
         for (index, title) in [L("Landscape"), L("Portrait")].enumerated() { orientation.setLabel(title, forSegment: index) }
         chooseButton.title = "…"
         previewStatusLabel.stringValue = L("Offline")
@@ -335,15 +363,16 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         content.addSubview(rootBackground)
         rootBackground.frame = content.bounds
         rootBackground.autoresizingMask = [.width, .height]
+        rootBackground.bounds = NSRect(x: 0, y: 0, width: 1280, height: 800)
 
         toolbarPanel.frame = NSRect(x: 0, y: 724, width: 1280, height: 76)
         previewPanel.frame = NSRect(x: 20, y: 154, width: 860, height: 542)
         controlPanel.frame = NSRect(x: 900, y: 154, width: 360, height: 542)
         transportPanel.frame = NSRect(x: 20, y: 24, width: 1240, height: 104)
-        content.addSubview(toolbarPanel)
-        content.addSubview(controlPanel)
-        content.addSubview(previewPanel)
-        content.addSubview(transportPanel)
+        rootBackground.addSubview(toolbarPanel)
+        rootBackground.addSubview(controlPanel)
+        rootBackground.addSubview(previewPanel)
+        rootBackground.addSubview(transportPanel)
 
         buildToolbar()
         buildPreviewPanel()
@@ -418,12 +447,13 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         controlPanel.addSubview(audioCard)
         addFormLabel(L("Source"), x: 18, y: 54, parent: audioCard)
         audioMode.frame = NSRect(x: 112, y: 48, width: 224, height: 32)
-        audioMode.selectedSegment = savedSegment(DefaultsKey.audioMode, defaultValue: 1, upperBound: 2)
+        audioMode.selectedSegment = savedSegment(DefaultsKey.audioMode, defaultValue: 1, upperBound: 3)
         audioMode.segmentStyle = .rounded
         audioMode.target = self
         audioMode.action = #selector(selectionChanged)
+        audioMode.toolTip = L("Mic records your microphone. Silent records video only. Input and Mix require a separately configured virtual audio input.")
         audioCard.addSubview(audioMode)
-        addFormLabel(L("System input"), x: 18, y: 18, parent: audioCard)
+        addFormLabel(L("Virtual input"), x: 18, y: 18, parent: audioCard)
         builtinPopup.frame = NSRect(x: 112, y: 10, width: 224, height: 34)
         stylePopup(builtinPopup)
         builtinPopup.target = self
@@ -927,27 +957,30 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     @objc private func showHelp() {
-        alert(L("Help"), L("Select a camera and audio source, then click the red button to record. Pause and resume as needed; click Stop to export an MP4. System audio requires a virtual input such as BlackHole or Loopback."))
+        alert(L("Help"), L("Select a camera and Mic, then click the red button to record. Pause and resume as needed; click Stop to save an MP4. Silent records video only. Input and Mix require an optional virtual audio device. Recover unfinished recordings from the Help menu."))
     }
 
     @objc private func refreshDevices() {
         guard !isBusy, !isConfiguring else { return }
-        refreshButton.isEnabled = false
+        isRefreshing = true
+        setControlsEnabled(false)
         setStatus(L("Checking permissions and refreshing devices…"))
 
         ensurePermissions { [weak self] granted in
             guard let self else { return }
+            self.isRefreshing = false
             guard granted else {
-                self.refreshButton.isEnabled = true
-                self.setStatus(L("Camera or microphone access was denied."))
-                self.alert(L("Permission required"), L("Allow LumaRec to access Camera and Microphone in System Settings → Privacy & Security, then refresh devices."))
+                self.isSessionConfigured = false
+                self.setControlsEnabled(true)
+                self.setStatus(L("Camera access was denied."))
+                self.alert(L("Permission required"), L("Allow Camera access in System Settings → Privacy & Security, then click Refresh."))
                 return
             }
 
-            self.videoDevices = AVCaptureDevice.devices(for: .video).map {
+            self.videoDevices = CaptureDevices.cameras.map {
                 CaptureDevice(id: $0.uniqueID, name: $0.localizedName, device: $0)
             }
-            self.audioDevices = AVCaptureDevice.devices(for: .audio).map {
+            self.audioDevices = CaptureDevices.microphones.map {
                 CaptureDevice(id: $0.uniqueID, name: $0.localizedName, device: $0)
             }
 
@@ -972,6 +1005,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
                 self.restoreSavedDeviceSelections()
             }
 
+            if self.audioDevices.isEmpty { self.restoreSavedDeviceSelections() }
             self.refreshButton.isEnabled = true
             self.configureCaptureSession()
         }
@@ -979,21 +1013,20 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
 
     private func ensurePermissions(_ completion: @escaping (Bool) -> Void) {
         let videoStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        let audioStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let needsAudio = audioMode.selectedSegment != 3
 
         func requestAudioIfNeeded(_ videoGranted: Bool) {
             guard videoGranted else {
                 DispatchQueue.main.async { completion(false) }
                 return
             }
-            if audioStatus == .authorized {
-                DispatchQueue.main.async { completion(true) }
-            } else if audioStatus == .notDetermined {
-                AVCaptureDevice.requestAccess(for: .audio) { granted in
-                    DispatchQueue.main.async { completion(granted) }
+            if needsAudio && AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { _ in
+                    // A denied microphone must still allow camera preview and Silent mode.
+                    DispatchQueue.main.async { completion(true) }
                 }
             } else {
-                DispatchQueue.main.async { completion(false) }
+                DispatchQueue.main.async { completion(true) }
             }
         }
 
@@ -1011,7 +1044,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     @objc private func selectionChanged() {
         guard !isBusy, !isConfiguring else { return }
         persistCurrentSettings()
-        configureCaptureSession()
+        refreshDevices()
     }
 
     @objc private func orientationChanged() {
@@ -1036,7 +1069,11 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         guard !isConfiguring, !isBusy else { return }
         isSessionConfigured = false
         guard !videoDevices.isEmpty else {
+            setControlsEnabled(true)
             startButton.isEnabled = false
+            placeholderLabel.isHidden = false
+            previewStatusLabel.stringValue = L("Offline")
+            sessionQueue.async { [weak self] in self?.captureSession.stopRunning() }
             setStatus(L("No camera found"))
             return
         }
@@ -1044,6 +1081,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         let selectedVideo = videoDevices[max(0, cameraPopup.indexOfSelectedItem)].device
         let selectedAudioInputs = currentAudioDevices()
         let selectedCameraName = selectedVideo.localizedName
+        updateAudioMeter(level: 0)
 
         isConfiguring = true
         setControlsEnabled(false)
@@ -1122,6 +1160,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
                 self.isConfiguring = false
                 self.isSessionConfigured = true
                 self.configuredAudioInputCount = addedAudioInputCount
+                self.setRecordingState(active: false)
                 self.setControlsEnabled(true)
                 self.placeholderLabel.isHidden = true
                 self.previewStatusLabel.stringValue = L("Live")
@@ -1130,7 +1169,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
                 if addedAudioInputCount > 0 {
                     self.setStatus(LF("Preview ready. Audio inputs: %d", addedAudioInputCount))
                 } else {
-                    self.setStatus(L("Preview ready. No audio input is available."))
+                    self.setStatus(self.audioMode.selectedSegment == 3 ? L("Preview ready. Video only.") : L("No microphone is available. Choose Silent or connect an input and click Refresh."))
                 }
                 self.applyPreviewOrientation()
             }
@@ -1138,7 +1177,9 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     private func currentAudioDevices() -> [AVCaptureDevice] {
-        guard !audioDevices.isEmpty else { return [] }
+        guard audioMode.selectedSegment != 3,
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
+              !audioDevices.isEmpty else { return [] }
         let mode = audioMode.selectedSegment
         let builtin = audioDevices[max(0, builtinPopup.indexOfSelectedItem)].device
         let mic = audioDevices[max(0, micPopup.indexOfSelectedItem)].device
@@ -1170,7 +1211,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         if orientation.selectedSegment == 1 {
             connection.videoOrientation = .portrait
         } else {
-            connection.videoOrientation = .portrait
+            connection.videoOrientation = .landscapeRight
         }
     }
 
@@ -1180,90 +1221,96 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
             alert(L("Preview is not ready"), L("Click Refresh and wait for the live preview before recording."))
             return
         }
-        guard FFmpegLocator.find() != nil else {
-            alert(L("FFmpeg not found"), L("Install FFmpeg with brew install ffmpeg, then try again. A custom executable can be set with LUMAREC_FFMPEG."))
-            return
-        }
-        guard configuredAudioInputCount > 0 else {
-            alert(L("No audio input"), L("Refresh devices and select a microphone or virtual audio input before recording."))
+        guard audioMode.selectedSegment == 3 || configuredAudioInputCount > 0 else {
+            alert(L("No audio input"), L("Allow Microphone access in System Settings → Privacy & Security, select an input and click Refresh, or choose Silent to record video only."))
             return
         }
 
         let outputDirectory = URL(fileURLWithPath: (outputField.stringValue as NSString).expandingTildeInPath, isDirectory: true)
         do {
-            try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+            try RecordingStore.validateDestination(outputDirectory)
+            try RecordingStore.validateDestination(RecordingStore.directory)
         } catch {
             alert(L("Output folder is unavailable"), error.localizedDescription)
             return
         }
 
         let finalURL = outputDirectory.appendingPathComponent(makeOutputFileName())
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("LumaRec-\(UUID().uuidString).mov")
 
         finalMP4URL = finalURL
-        tempMovieURL = tempURL
-        recordingAudioInputCount = configuredAudioInputCount
         recordingAudioMode = audioMode.selectedSegment
         exportConfiguration = ExportConfiguration(portrait: orientation.selectedSegment == 1,
                                                   mixAudio: recordingAudioMode == 2,
-                                                  quality: ExportQuality(rawValue: modePopup.indexOfSelectedItem) ?? .standard)
+                                                  quality: ExportQuality(rawValue: modePopup.indexOfSelectedItem) ?? .standard,
+                                                  requireAudio: audioMode.selectedSegment != 3)
+        do {
+            let record = try PendingRecording(output: finalURL, configuration: exportConfiguration)
+            pendingRecording = record
+            tempMovieURL = record.source
+        } catch {
+            alert(L("Output folder is unavailable"), error.localizedDescription)
+            return
+        }
+        guard let tempURL = tempMovieURL else { return }
         isRecordingInProgress = true
+        recordingHasStarted = false
         persistCurrentSettings()
 
-        let selectedAudioNames = currentAudioDevices().map { $0.localizedName }.joined(separator: " + ")
+        let selectedAudioNames = audioMode.selectedSegment == 3 ? L("Silent") : currentAudioDevices().map { $0.localizedName }.joined(separator: " + ")
 
         setControlsEnabled(false)
-        pauseButton.isEnabled = true
-        stopButton.isEnabled = true
+        pauseButton.isEnabled = false
+        stopButton.isEnabled = false
         setRecordingState(active: true)
-        if lastObservedAudioLevel < 0.01 {
+        if audioMode.selectedSegment != 3 && lastObservedAudioLevel < 0.01 {
             setStatus(LF("Recording to %@ · Audio: %@ · Low audio level", finalURL.path, selectedAudioNames))
         } else {
             setStatus(LF("Recording to %@ · Audio: %@", finalURL.path, selectedAudioNames))
         }
         savedPathLabel.stringValue = LF("Recording: %@", finalURL.lastPathComponent)
-        recordingStartedAt = Date()
-        pauseStartedAt = nil
-        accumulatedPausedDuration = 0
         isRecordingPaused = false
-        startRecordTimer()
-
+        recordingActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Recording video")
+        setStatus(L("Starting recording…"))
         movieOutput.startRecording(to: tempURL, recordingDelegate: self)
     }
 
     @objc private func togglePauseRecording() {
-        guard movieOutput.isRecording else {
+        guard isRecordingInProgress, recordingHasStarted else {
             setStatus(L("No recording is in progress."))
             return
         }
 
-        if isRecordingPaused {
-            movieOutput.resumeRecording()
-            if let pausedAt = pauseStartedAt {
-                accumulatedPausedDuration += Date().timeIntervalSince(pausedAt)
-            }
-            pauseStartedAt = nil
-            isRecordingPaused = false
-            pauseButton.image = makeSymbolImage("pause.fill", color: NSColor(hex: 0x4B5563))
-            pauseButton.toolTip = L("Pause recording")
-            recordStateLabel.stringValue = L("Recording")
-            setStatus(L("Recording resumed."))
-            startRecordTimer()
-        } else {
-            movieOutput.pauseRecording()
-            pauseStartedAt = Date()
-            isRecordingPaused = true
-            pauseButton.image = makeSymbolImage("play.fill", color: NSColor(hex: 0x4B5563))
-            pauseButton.toolTip = L("Resume recording")
-            recordStateLabel.stringValue = L("Paused")
-            setStatus(L("Recording paused."))
-            recordTimer?.invalidate()
-            recordTimer = nil
+        pauseButton.isEnabled = false
+        if isRecordingPaused { movieOutput.resumeRecording() }
+        else { movieOutput.pauseRecording() }
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didPauseRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isRecordingInProgress else { return }
+            self.isRecordingPaused = true
+            self.pauseButton.isEnabled = true
+            self.pauseButton.image = self.makeSymbolImage("play.fill", color: NSColor(hex: 0x4B5563))
+            self.pauseButton.toolTip = L("Resume recording")
+            self.recordStateLabel.stringValue = L("Paused")
+            self.setStatus(L("Recording paused."))
+        }
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didResumeRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isRecordingInProgress else { return }
+            self.isRecordingPaused = false
+            self.pauseButton.isEnabled = true
+            self.pauseButton.image = self.makeSymbolImage("pause.fill", color: NSColor(hex: 0x4B5563))
+            self.pauseButton.toolTip = L("Pause recording")
+            self.recordStateLabel.stringValue = L("Recording")
+            self.setStatus(L("Recording resumed."))
         }
     }
 
     @objc private func stopRecording() {
-        guard movieOutput.isRecording else {
+        guard isRecordingInProgress, recordingHasStarted else {
             setStatus(L("No recording is in progress."))
             return
         }
@@ -1271,6 +1318,17 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
         pauseButton.isEnabled = false
         stopButton.isEnabled = false
         movieOutput.stopRecording()
+    }
+
+    func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.recordingHasStarted = true
+            self.pauseButton.isEnabled = true
+            self.stopButton.isEnabled = true
+            self.setStatus(LF("Recording: %@", fileURL.lastPathComponent))
+            self.startRecordTimer()
+        }
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
@@ -1282,125 +1340,138 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     private func finishRecording(at outputFileURL: URL, error: Error?) {
         isRecordingInProgress = false
         stopRecordTimer()
+        if let recordingActivity { ProcessInfo.processInfo.endActivity(recordingActivity) }
+        recordingActivity = nil
 
+        recordingHasStarted = false
+        isRecordingPaused = false
         let successfullyFinished = (error as NSError?)?.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool ?? false
+        // Even an interrupted capture may contain usable frames. Keep it, and allow retry/export.
         if let error, !successfullyFinished {
             setRecordingState(active: false)
             setControlsEnabled(true)
-            pauseButton.isEnabled = false
-            stopButton.isEnabled = false
-            isRecordingPaused = false
-            pauseStartedAt = nil
-            setStatus(LF("Recording failed: %@", error.localizedDescription))
-            alert(L("Recording failed"), error.localizedDescription)
+            setStatus(LF("Export failed. Temporary recording kept at: %@", outputFileURL.path))
+            alert(L("Recording interrupted"), error.localizedDescription + "\n\n" + LF("Original recording: %@", outputFileURL.path))
             return
         }
-
         guard let finalURL = finalMP4URL else {
             setRecordingState(active: false)
             setControlsEnabled(true)
-            pauseButton.isEnabled = false
-            stopButton.isEnabled = false
-            isRecordingPaused = false
-            pauseStartedAt = nil
-            setStatus(L("Recording stopped, but the output path is missing."))
+            setStatus(LF("Original recording: %@", outputFileURL.path))
             return
         }
-
-        let audioTrackCount = AVAsset(url: outputFileURL).tracks(withMediaType: .audio).count
-        recordingAudioInputCount = audioTrackCount
-        exportConfiguration.audioTrackCount = audioTrackCount
-        guard audioTrackCount > 0 else {
-            setRecordingState(active: false)
-            setControlsEnabled(true)
-            pauseButton.isEnabled = false
-            stopButton.isEnabled = false
-            isRecordingPaused = false
-            pauseStartedAt = nil
-            setStatus(LF("No audio track. Temporary recording: %@", outputFileURL.path))
-            alert(L("No audio was recorded"), L("The recording has no audio track. Check microphone permissions and select an audio source, then try again. The temporary MOV has been kept."))
-            return
-        }
-
-        setStatus(LF("Exporting MP4 · Audio tracks: %d", audioTrackCount))
-        isExporting = true
-        recordStateLabel.stringValue = L("Exporting…")
-        pauseButton.isEnabled = false
-        stopButton.isEnabled = false
         convertMovieToMP4(tempURL: outputFileURL, finalURL: finalURL)
     }
 
     private func convertMovieToMP4(tempURL: URL, finalURL: URL) {
-        guard let ffmpegURL = FFmpegLocator.find() else {
-            isExporting = false
-            setRecordingState(active: false)
-            setControlsEnabled(true)
-            setStatus(LF("Export failed. Temporary recording kept at: %@", tempURL.path))
-            alert(L("FFmpeg not found"), L("Install FFmpeg with brew install ffmpeg, then try again. A custom executable can be set with LUMAREC_FFMPEG."))
-            return
-        }
-        let process = Process()
-        process.executableURL = ffmpegURL
-        process.arguments = exportConfiguration.arguments(input: tempURL, output: finalURL)
-
-        // A file avoids filling a pipe and blocking FFmpeg on a long error message.
-        let logURL = FileManager.default.temporaryDirectory.appendingPathComponent("LumaRec-\(UUID().uuidString).log")
-        FileManager.default.createFile(atPath: logURL.path, contents: nil)
-        guard let logHandle = try? FileHandle(forWritingTo: logURL) else {
-            isExporting = false
-            setRecordingState(active: false)
-            setControlsEnabled(true)
-            setStatus(LF("Export failed. Temporary recording kept at: %@", tempURL.path))
-            return
-        }
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = logHandle
-        exportProcess = process
-
-        process.terminationHandler = { [weak self] process in
-            try? logHandle.close()
-            let errorText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            try? FileManager.default.removeItem(at: logURL)
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.isExporting = false
-                self.exportProcess = nil
-                self.setRecordingState(active: false)
-                self.setControlsEnabled(true)
-                self.pauseButton.isEnabled = false
-                self.stopButton.isEnabled = false
-                self.isRecordingPaused = false
-                self.pauseStartedAt = nil
-
-                if ExportValidation.succeeded(output: finalURL, exitCode: process.terminationStatus, errorLog: errorText) {
-                    try? FileManager.default.removeItem(at: tempURL)
+        isExporting = true
+        setControlsEnabled(false)
+        setRecordingState(active: false)
+        recordStateLabel.stringValue = L("Exporting…")
+        setStatus(L("Exporting MP4. Your original recording is kept until export succeeds."))
+        let configuration = exportConfiguration
+        let record = pendingRecording
+        Task {
+            do {
+                try await NativeExporter.export(input: tempURL, output: finalURL, configuration: configuration)
+                await MainActor.run {
+                    // Source cleanup is deliberately after validated, non-overwriting export.
+                    if let record {
+                        if let evidence = self.hardwareEvidenceDirectory {
+                            try? FileManager.default.copyItem(at: record.source, to: evidence.appendingPathComponent("private-original.mov"))
+                        }
+                        try? record.remove()
+                    }
+                    self.pendingRecording = nil
+                    self.isExporting = false
+                    self.setRecordingState(active: false)
+                    self.setControlsEnabled(true)
                     self.setStatus(LF("Saved: %@", finalURL.path))
                     self.savedPathLabel.stringValue = LF("Saved: %@", finalURL.path)
                     self.notifyRecordingFinished(finalURL)
-                } else {
+                }
+            } catch {
+                await MainActor.run {
+                    self.isExporting = false
+                    self.setRecordingState(active: false)
+                    self.setControlsEnabled(true)
                     self.setStatus(LF("Export failed. Temporary recording kept at: %@", tempURL.path))
-                    self.alert(L("MP4 export failed"), errorText.isEmpty ? LF("FFmpeg exit code: %d", process.terminationStatus) : errorText)
+                    self.alert(L("MP4 export failed"), error.localizedDescription + "\n\n" + LF("Original recording: %@", tempURL.path) + "\n" + L("Use Help → Recover recordings to try exporting again."))
                 }
             }
         }
+    }
 
-        do {
-            try process.run()
-        } catch {
-            try? logHandle.close()
-            try? FileManager.default.removeItem(at: logURL)
-            isExporting = false
-            exportProcess = nil
-            setRecordingState(active: false)
-            setControlsEnabled(true)
-            pauseButton.isEnabled = false
-            stopButton.isEnabled = false
-            setStatus(LF("Export failed: %@", error.localizedDescription))
-            alert(L("MP4 export failed"), error.localizedDescription)
+    func recoverRecordings() {
+        guard !isBusy else { showBusyAlert(); return }
+        let records = RecordingStore.pending()
+        guard !records.isEmpty else {
+            alert(L("Recover recordings…"), L("There are no pending recordings."))
+            return
+        }
+        let choice = NSAlert()
+        choice.messageText = L("Recover recording")
+        choice.informativeText = L("Choose a recording to recover. Every original is kept until its export succeeds.")
+        let selection = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 460, height: 30))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium; formatter.timeStyle = .medium
+        for record in records {
+            selection.addItem(withTitle: formatter.string(from: record.createdAt) + " · " + record.output.lastPathComponent)
+            selection.lastItem?.toolTip = record.source.path
+        }
+        choice.accessoryView = selection
+        choice.addButton(withTitle: L("Export MP4…"))
+        choice.addButton(withTitle: L("Show in Finder"))
+        choice.addButton(withTitle: L("Cancel"))
+        let response = choice.runModal()
+        let record = records[max(0, selection.indexOfSelectedItem)]
+        switch response {
+        case .alertFirstButtonReturn:
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.mpeg4Movie]
+            panel.nameFieldStringValue = record.output.lastPathComponent
+            panel.directoryURL = record.output.deletingLastPathComponent()
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            pendingRecording = record
+            exportConfiguration = record.configuration
+            convertMovieToMP4(tempURL: record.source, finalURL: url)
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.activateFileViewerSelecting([record.source])
+        default: break
+        }
+    }
+
+    private func captureInterrupted(_ notification: Notification) {
+        guard !isConfiguring else { return }
+        if notification.name != AVCaptureDevice.wasDisconnectedNotification,
+           notification.object as? AVCaptureSession !== captureSession { return }
+        if notification.name == AVCaptureDevice.wasDisconnectedNotification,
+           let device = notification.object as? AVCaptureDevice,
+           !captureSession.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).contains(where: { $0.device.uniqueID == device.uniqueID }) { return }
+        isSessionConfigured = false
+        previewStatusLabel.stringValue = L("Offline")
+        if isRecordingInProgress {
+            setStatus(L("Capture interrupted. Finishing the recording; the original will be kept if export fails."))
+            if recordingHasStarted { stopRecording() }
+        } else if !isExporting {
+            startButton.isEnabled = false
+            placeholderLabel.isHidden = false
+            setStatus(L("Capture interrupted. Reconnect your devices and click Refresh."))
         }
     }
 
     private func notifyRecordingFinished(_ fileURL: URL) {
+        if let directory = hardwareEvidenceDirectory {
+            Task {
+                do {
+                    let report = try await RecordingInspection.inspect(fileURL, expectedDuration: 4)
+                    print(report)
+                    try report.write(to: directory.appendingPathComponent("hardware-result.txt"), atomically: true, encoding: .utf8)
+                    await MainActor.run { NSApp.terminate(nil) }
+                } catch { fputs("HARDWARE FAIL: \(error)\n", stderr); exit(1) }
+            }
+            return
+        }
         let alert = NSAlert()
         alert.messageText = L("Recording complete")
         alert.informativeText = LF("File: %@\nFolder: %@", fileURL.lastPathComponent, fileURL.deletingLastPathComponent().path)
@@ -1425,10 +1496,10 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
 
     private func setControlsEnabled(_ enabled: Bool) {
         refreshButton.isEnabled = enabled
-        startButton.isEnabled = enabled
+        startButton.isEnabled = enabled && isSessionConfigured
         cameraPopup.isEnabled = enabled
-        builtinPopup.isEnabled = enabled
-        micPopup.isEnabled = enabled
+        builtinPopup.isEnabled = enabled && [0, 2].contains(audioMode.selectedSegment)
+        micPopup.isEnabled = enabled && [1, 2].contains(audioMode.selectedSegment)
         audioMode.isEnabled = enabled
         orientation.isEnabled = enabled
         outputField.isEnabled = enabled
@@ -1438,7 +1509,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     private func savedSegment(_ key: String, defaultValue: Int, upperBound: Int) -> Int {
-        if ProcessInfo.processInfo.arguments.contains("--screenshot") { return defaultValue }
+        if ProcessInfo.processInfo.arguments.contains("--screenshot") || hardwareEvidenceDirectory != nil { return defaultValue }
         guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
         return min(upperBound, max(0, UserDefaults.standard.integer(forKey: key)))
     }
@@ -1512,7 +1583,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     private func persistCurrentSettings() {
-        guard !ProcessInfo.processInfo.arguments.contains("--screenshot") else { return }
+        guard !ProcessInfo.processInfo.arguments.contains("--screenshot"), hardwareEvidenceDirectory == nil else { return }
         let defaults = UserDefaults.standard
         defaults.set(outputField.stringValue, forKey: DefaultsKey.outputDirectory)
         defaults.set(audioMode.selectedSegment, forKey: DefaultsKey.audioMode)
@@ -1541,9 +1612,12 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     private func setRecordingState(active: Bool) {
-        recordStateLabel.stringValue = active ? L("Recording") : L("Ready to record")
+        recordStateLabel.stringValue = active ? L("Recording") : (isSessionConfigured ? L("Ready to record") : L("Idle"))
         recordDot.layer?.backgroundColor = active ? NSColor(hex: 0xEF4444).cgColor : NSColor(hex: 0x22C55E).cgColor
         timerLabel.stringValue = active ? "00:00" : "00:00"
+        startButton.setAccessibilityLabel(L("Start recording"))
+        pauseButton.setAccessibilityLabel(isRecordingPaused ? L("Resume recording") : L("Pause recording"))
+        stopButton.setAccessibilityLabel(L("Stop recording"))
         startButton.layer?.backgroundColor = (active ? NSColor(hex: 0xE5E7EB) : NSColor(hex: 0xFF3B30)).cgColor
         if active == false {
             pauseButton.isEnabled = false
@@ -1565,22 +1639,69 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
     }
 
     @objc private func updateRecordTimer() {
-        guard let started = recordingStartedAt else { return }
-        let currentPaused = pauseStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-        let elapsed = max(0, Int(Date().timeIntervalSince(started) - accumulatedPausedDuration - currentPaused))
+        let seconds = movieOutput.recordedDuration.seconds
+        let elapsed = seconds.isFinite ? max(0, Int(seconds)) : 0
         timerLabel.stringValue = String(format: "%02d:%02d", elapsed / 60, elapsed % 60)
     }
 
     private func setStatus(_ text: String) {
         statusLabel.stringValue = text
+        statusLabel.toolTip = text
+        statusLabel.setAccessibilityLabel(text)
     }
 
     private func alert(_ title: String, _ message: String) {
+        if hardwareEvidenceDirectory != nil {
+            fputs("HARDWARE FAIL: \(title): \(message)\n", stderr)
+            exit(1)
+        }
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: L("OK"))
         alert.runModal()
+    }
+
+    private var hardwareEvidenceDirectory: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "--hardware-verify"), arguments.indices.contains(index + 1) else { return nil }
+        return URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
+    }
+
+    /// Drives the same UI actions and recording delegates as a real user. Local evidence only.
+    @MainActor func verifyHardware() async {
+        guard let directory = hardwareEvidenceDirectory else { return }
+        func waitFor(_ condition: () -> Bool) async throws {
+            let deadline = Date().addingTimeInterval(30)
+            while !condition() {
+                if Date() > deadline { throw NSError(domain: "HardwareCheck", code: 1, userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for capture state or macOS permission approval"]) }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try await waitFor { isSessionConfigured && !isBusy }
+            outputField.stringValue = directory.path
+            let devices = "Camera: " + (cameraPopup.titleOfSelectedItem ?? "none") + "\nMicrophone: " + (micPopup.titleOfSelectedItem ?? "none") + "\n" + CaptureDevices.status() + "\n"
+            try devices.write(to: directory.appendingPathComponent("devices.txt"), atomically: true, encoding: .utf8)
+            startRecording()
+            try await waitFor { recordingHasStarted }
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            togglePauseRecording()
+            try await waitFor { isRecordingPaused }
+            let pausedDuration = movieOutput.recordedDuration.seconds
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            guard abs(movieOutput.recordedDuration.seconds - pausedDuration) < 0.15 else {
+                throw NSError(domain: "HardwareCheck", code: 2, userInfo: [NSLocalizedDescriptionKey: "Recording duration advanced while paused"])
+            }
+            togglePauseRecording()
+            try await waitFor { !isRecordingPaused }
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            stopRecording()
+        } catch {
+            fputs("HARDWARE FAIL: \(error.localizedDescription)\n", stderr)
+            exit(1)
+        }
     }
 
     @objc private func qualityChanged() {
@@ -1597,6 +1718,7 @@ final class RecorderWindowController: NSWindowController, NSWindowDelegate, AVCa
 
     func windowWillClose(_ notification: Notification) {
         persistCurrentSettings()
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
         if movieOutput.isRecording {
             movieOutput.stopRecording()
         }

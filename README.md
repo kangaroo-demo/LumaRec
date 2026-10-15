@@ -1,99 +1,55 @@
-<p align="center">
-  <img src="docs/images/icon.png" width="112" alt="LumaRec icon">
-</p>
-
+<p align="center"><img src="docs/images/icon.png" width="112" alt="LumaRec icon"></p>
 <h1 align="center">LumaRec</h1>
-
-<p align="center">A small, native macOS camera recorder. Preview, record, and save MP4 videos locally.</p>
-
+<p align="center">A native Mac camera recorder. Preview, record, and save MP4 locally.</p>
 <p align="center">English · <a href="README.zh-CN.md">简体中文</a></p>
 
 ![LumaRec English interface](docs/images/lumarec-en.png)
 
-LumaRec is an open-source Swift/AppKit utility for recording a camera with a microphone or virtual audio input. It keeps the everyday controls in one window: choose your devices, check the preview and audio meter, record, then export an MP4. No account or cloud service is required.
+LumaRec records your camera and microphone using the media frameworks built into macOS. **No Homebrew, FFmpeg, Xcode, terminal commands, accounts, or internet connection are needed to use the app.**
 
-## Features
+## Install
 
-- Live camera preview and audio level meter.
-- Start, pause, resume, and stop recording.
-- Microphone, system input, and mixed audio modes.
-- Landscape 1920 × 1080 or clockwise-rotated portrait 1080 × 1920 output, at 30 fps.
-- H.264 video and AAC audio in MP4, with Standard, Compact, and High quality presets.
-- An output folder of your choice; device and recording preferences are remembered.
-- English by default, with a persistent **Language → 简体中文** switch.
+Requires **macOS 13 Ventura or later**, on Apple Silicon or Intel. Version 1.0.0 is currently a release candidate; see the [release handoff](docs/release-handoff.md) for qualification results. A stable release has not yet been published. Candidate DMG/ZIP assets are prepared in the project's release draft for review.
 
-Output dimensions are export targets. Actual capture quality depends on your camera; lower-resolution sources are scaled and padded to fit. Portrait mode rotates the camera image 90° clockwise.
+Open the DMG, drag **LumaRec.app** to **Applications**, and open it there. With the ZIP, extract and drag the app to Applications. Allow Camera and Microphone when asked.
 
-## Requirements
+**This candidate is locally signed, not Apple Developer ID signed or notarized.** macOS may block its first launch. The normal per-app approval is **System Settings → Privacy & Security → Open Anyway**, after dismissing the initial block. Availability depends on macOS and device management policy; this first-open path still needs validation from a downloaded candidate. Do not disable system security or use terminal workarounds. Read the [bilingual offline installation guide](docs/INSTALL.md).
 
-- macOS 13 Ventura or later.
-- A camera and an audio input, with Camera and Microphone permissions granted.
-- [FFmpeg](https://ffmpeg.org/) with the `libx264` and AAC encoders. The Homebrew build works.
-- Xcode Command Line Tools with Swift 5.9 or later to build from source.
+## Record
 
-## Build and run
+1. Select your camera and microphone, then wait for the preview. Speak to check the meter.
+2. Choose an output folder, landscape or portrait, and a quality preset.
+3. Click Record. Pause and resume as needed; click Stop to export the MP4.
+4. Wait for export, then open the file or reveal it in Finder.
 
-Install the build tools and FFmpeg using [Homebrew](https://brew.sh/):
+Recordings default to Movies. **Silent** mode records video without a microphone or Microphone permission. English is the default; **Language → 简体中文** switches the full interface.
+
+Exports use H.264 video and AAC audio, at 30 fps. Landscape is 1920 × 1080; portrait is 1080 × 1920 with the camera picture rotated clockwise. Sources fill the frame with their aspect ratio preserved; edges are cropped from the center when needed, with no added black borders. Output dimensions do not increase the detail captured by your camera. Compact, Standard and High quality target 4, 8 and 16 Mbps video respectively; actual bitrate varies with the content.
+
+### Optional audio inputs
+
+**Mic** is the ordinary, ready-to-use mode. **Input** selects an existing audio input; **Mix** combines that input and your microphone. These advanced modes do **not** directly capture speaker output. To record system audio, separately configure a virtual input such as BlackHole or Loopback. This is optional and is never required for camera + microphone recording. Some device combinations cannot share one capture session; use Mic or one precombined input in that case.
+
+### Recovery and privacy
+
+Original MOV recordings and export settings stay in `~/Library/Application Support/LumaRec/Recordings` until a validated MP4 has been saved. Failed exports keep the original. **Help → Recover recordings** lets you choose any pending recording, including when another is damaged. Export never replaces an existing file. Crash-damaged MOV files may still be unrecoverable; retention is not a guarantee of repair. Originals are not encrypted; remove unwanted recovery folders in Finder.
+
+The app checks the output folder and free space before capture, stops capture near low disk space, and prevents normal quit while recording or exporting. Reconnect disconnected devices and click Refresh. If permission is denied, enable it in **System Settings → Privacy & Security → Camera / Microphone**; Silent needs only Camera access.
+
+LumaRec has no analytics, account service, cloud upload, auto updater, or runtime download. Only the GitHub help action opens a website. Media processing stays on your Mac.
+
+## Build and verify (developers only)
+
+Command Line Tools with Swift 5.9+ are required to build; app users do not need them.
 
 ```sh
-xcode-select --install  # Skip if the Command Line Tools are already installed.
-brew install ffmpeg
-git clone https://github.com/kangaroo-demo/LumaRec.git
-cd LumaRec
-./scripts/build-app.sh
-open dist/LumaRec.app
-```
-
-The script compiles a release build, assembles the app bundle, and signs it locally with an ad hoc signature. The app is not notarized by Apple. Run the `.app` bundle so macOS can display its camera and microphone permission prompts correctly. You can also open `Package.swift` in Xcode to browse and edit the source.
-
-To create a ZIP for the current Mac's architecture:
-
-```sh
+swift run LumaRecChecks
 ./scripts/build-app.sh --archive
+./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.dmg" "$PWD/work/dmg-verification"
 ```
 
-FFmpeg is an external runtime dependency and is not included in the app or ZIP. LumaRec checks `/opt/homebrew/bin`, `/usr/local/bin`, and `PATH`. To use another installation, launch the executable directly:
+The build compiles each architecture separately, combines them into a universal app, signs locally, and produces DMG, ZIP, build metadata and SHA-256 checksums. No third-party runtime is bundled. [Release procedure](docs/RELEASING.md) covers optional Developer ID signing and notarization. [Contributing](CONTRIBUTING.md) covers testing.
 
-```sh
-LUMAREC_FFMPEG=/absolute/path/to/ffmpeg dist/LumaRec.app/Contents/MacOS/LumaRec
-```
+Automated tests generate and decode synthetic media with Apple's frameworks. Final-package verification runs the extracted app with an empty inherited environment and only system PATH. Hardware capture, audible playback/lip-sync and the downloaded app's first-open approval are reported separately; synthetic checks are not camera acceptance.
 
-## Record a video
-
-1. Open LumaRec and allow Camera and Microphone access.
-2. Choose your camera and microphone. Click **Refresh** after plugging in another device.
-3. Choose an audio source, output folder, orientation, and export quality.
-4. Click the red record button. Use Pause to pause or resume.
-5. Click Stop and wait for MP4 export. Open the saved file or reveal it in Finder.
-
-Recordings default to your Movies folder. Filenames include a timestamp, orientation, and a short random ID; existing recordings are not overwritten. Stop and finish exporting before closing the app.
-
-### System audio and mixing
-
-**System** selects an audio input device; it does not capture speaker output by itself. To record macOS system audio, install and configure a virtual audio device such as [BlackHole](https://github.com/ExistentialAudio/BlackHole) or [Loopback](https://rogueamoeba.com/loopback/), route playback into it, and select it under **System input**. Use a Multi-Output Device in Audio MIDI Setup if you also want to hear the playback.
-
-**Mix** attempts to capture the selected system input and microphone, then combines their audio tracks during export. Some device combinations cannot be added to one AVFoundation session. In that case, combine the sources in a virtual/aggregate input and record that single input. Selecting the same device in both menus records it only once. This version requires an audio input; silent video recording is not supported.
-
-## Privacy and troubleshooting
-
-Video processing runs locally. LumaRec has no analytics, account system, upload service, or automatic updater. Preferences are stored in macOS UserDefaults. The GitHub help action opens the project in your browser.
-
-- **No preview or audio:** check **System Settings → Privacy & Security → Camera / Microphone**, then refresh devices.
-- **FFmpeg not found:** run `brew install ffmpeg`, or set `LUMAREC_FFMPEG` as shown above.
-- **Silent system audio:** check the virtual device's routing and the live audio meter.
-- **Export failed:** the original temporary MOV is kept; the status line shows its path for export failures. Check the output folder's permissions and available disk space. Temporary recordings are not encrypted; delete recovered files when you no longer need them.
-
-## Development
-
-```sh
-swift run LumaRecChecks --require-ffmpeg
-./scripts/build-app.sh --archive
-```
-
-The tests cover localization and export behavior; when FFmpeg and FFprobe are available, they also encode and inspect synthetic videos without accessing a camera. GitHub Actions tests and builds the macOS app. Hardware capture still needs manual testing on a Mac.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, screenshot commands, and contribution guidance.
-
-## License
-
-[MIT](LICENSE). FFmpeg and virtual audio tools are separate projects with their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+[MIT License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)

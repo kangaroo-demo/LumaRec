@@ -1,30 +1,31 @@
 name: macOS
-
 on:
   push:
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Install FFmpeg
-        run: brew install ffmpeg
-      - name: Test
-        run: swift run LumaRecChecks --require-ffmpeg
-      - name: Build app
+      - name: Native media and recovery checks
+        run: swift run LumaRecChecks
+      - name: Validate bilingual catalogs
+        run: python3 scripts/check-localization.py
+      - name: Universal app, ZIP and DMG
         run: ./scripts/build-app.sh --archive
-      - name: Smoke test packaged resources
-        run: |
-          dist/LumaRec.app/Contents/MacOS/LumaRec --screenshot "$RUNNER_TEMP/lumarec-en.png"
-          dist/LumaRec.app/Contents/MacOS/LumaRec --language zh-Hans --screenshot "$RUNNER_TEMP/lumarec-zh.png"
-      - name: Upload app
-        uses: actions/upload-artifact@v4
+      - name: Exercise final extracted DMG
+        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.dmg" "$RUNNER_TEMP/dmg-evidence"
+      - name: Exercise final extracted ZIP
+        run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.zip" "$RUNNER_TEMP/zip-evidence"
+      - uses: actions/upload-artifact@v4
         with:
-          name: LumaRec-macOS
-          path: dist/*.zip
+          name: LumaRec-macOS-universal-candidate
+          path: |
+            dist/*.zip
+            dist/*.dmg
+            dist/*.txt
+            ${{ runner.temp }}/dmg-evidence
+            ${{ runner.temp }}/zip-evidence

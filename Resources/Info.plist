@@ -15,6 +15,7 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>NSCameraUsageDescription</key><string>LumaRec uses your camera to preview and record video locally.</string>
     <key>NSMicrophoneUsageDescription</key><string>LumaRec uses your microphone or virtual audio device to record audio locally.</string>
+    <key>NSCameraUseContinuityCameraDeviceType</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
 </plist>

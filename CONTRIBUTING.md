@@ -1,53 +1,31 @@
 # Contributing / 参与贡献
 
-Bug reports and small, focused pull requests are welcome. Include your macOS version, Mac architecture, selected devices, and steps to reproduce. Remove personal paths and recordings from logs before sharing them. English and Chinese issues are both welcome.
-
-欢迎提交问题和小范围的 Pull Request。请说明 macOS 版本、Mac 架构、所选设备和复现步骤；分享日志前请去除个人路径和录制内容。支持使用中文或英文交流。
-
-## Layout / 工程结构
-
-```text
-Package.swift                      Swift Package Manager project
-Sources/LumaRec/
-  main.swift                       App entry point
-  AppDelegate.swift                AppKit UI and AVFoundation capture
-Sources/LumaRecCore/
-  ExportConfiguration.swift        FFmpeg discovery and export settings
-  Localization.swift               English default and language selection
-  Resources/{en,zh-Hans}.lproj/     Interface and permission translations
-Resources/                         App metadata and icon
-scripts/build-app.sh               Local build, packaging, and signing
-Tests/LumaRecChecks/                Tests without hardware access
-docs/images/                       Icon and generated UI screenshots
-.github/workflows/ci.yml           macOS tests and app packaging
-```
-
-## Verify a change / 验证改动
+Use macOS 13+ with Swift 5.9+ Command Line Tools. No package manager or FFmpeg is needed.
 
 ```sh
-swift run LumaRecChecks --require-ffmpeg
+swift run LumaRecChecks
 ./scripts/build-app.sh --archive
+./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-universal.zip" "$PWD/work/zip-verification"
 ```
 
-Checks run with Command Line Tools and do not require XCTest or the full Xcode app. Use `swift run LumaRecChecks` to run translation checks when FFmpeg is unavailable.
+`Sources/LumaRec` contains AppKit UI and camera capture. `Sources/LumaRecCore` contains native export,
+recording recovery, localization, device discovery, synthetic qualification and actual-output inspection.
+`Tests/LumaRecChecks` runs checks without XCTest or full Xcode. Packaging works with Command Line Tools.
 
-验证工具只需要 Command Line Tools，不依赖 XCTest 或完整 Xcode。未安装 FFmpeg 时，可执行 `swift run LumaRecChecks` 运行双语资源检查。
+The extracted app's `--verify-export /absolute/new-directory` flag generates synthetic media and exercises
+its actual exporter, without opening a camera. `--screenshot /absolute/file.png --language en` (or `zh-Hans`)
+renders its interface without requesting permissions. `--device-status` reads availability and permission status.
 
-For capture changes, manually test permissions, preview, pause/resume, both orientations, each audio mode, device switching, and export failure recovery. Confirm that exported files play with audio. Camera and microphone access is not part of automated tests.
+For authorized local hardware acceptance, `--hardware-verify /absolute/evidence-directory` launches the
+normal app, requests normal macOS permissions and drives the same UI actions: record 2s, pause 2s,
+resume 2s, stop and export. It validates the resulting duration, timestamp continuity and nonzero microphone
+PCM after decoding. Be present to approve system prompts; do not grant them through automation.
+Hardware clips are private local evidence: never commit or upload them. Human playback/lip-sync review
+and downloaded-app Gatekeeper UI acceptance are separate requirements.
 
-修改录制逻辑后，请手动验证权限、预览、暂停与继续、横竖屏、各音频模式、设备切换和导出失败恢复，并确认导出文件可正常播放且带有声音。自动测试不会访问摄像头或麦克风。
+Manually check denial, Silent with microphone denied, device switching/disconnection, stopping while paused,
+quit while busy, long recordings and output-volume failures. Keep both string catalogs complete.
+See [release procedure](docs/RELEASING.md) and [handoff](docs/release-handoff.md).
 
-## Screenshots / 界面截图
-
-The screenshot mode renders the app window and exits without requesting permissions or opening capture devices. `--language` applies only to that launch and does not change the saved preference.
-
-截图模式会渲染应用窗口并退出，不请求权限、不打开录制设备。`--language` 仅影响本次启动，不改变已保存的偏好。
-
-```sh
-dist/LumaRec.app/Contents/MacOS/LumaRec --language en --screenshot docs/images/lumarec-en.png
-dist/LumaRec.app/Contents/MacOS/LumaRec --language zh-Hans --screenshot docs/images/lumarec-zh.png
-```
-
-Keep the English and Chinese string catalogs and READMEs in sync. Add tests for changes that affect export results or data safety. Avoid committing generated apps, FFmpeg binaries, local recordings, secrets, or the original `work/` and `outputs/` folders.
-
-请同步维护中英文字符串和 README。涉及导出结果或数据安全的修改应补充测试。不要提交生成的应用、FFmpeg 二进制、录制文件、密钥或原来的 `work/`、`outputs/` 目录。
+请同步维护中英文本地化；合成素材测试不能替代真实硬件验收。报告问题时附 macOS、架构、设备种类与复现步骤。
+分享日志前移除个人路径，勿上传用户录制、密钥、生成的应用或本地工作目录。
