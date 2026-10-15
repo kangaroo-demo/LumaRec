@@ -72,3 +72,9 @@ Real camera/microphone clips are private local evidence. Never upload them to Gi
 ### First-release scope decision
 
 Per coordinating user steering: qualify and distribute **Apple Silicon (arm64) only** for version 1.0.0. Intel/universal development assets are not user-facing downloads and no Intel support claim is made. Do not keep first delivery waiting on Rosetta mixer investigation. The final source commit updates installation guides, READMEs, release notes and CI to the arm64 scope; release builds use `--native` on this Apple Silicon host. Previously listed universal hashes are superseded and must not be used on the website. Native camera code remains the tested native Apple implementation. Downloaded first-open and human playback remain the final user actions, not a request to buy an Apple account.
+
+### Continuous output clock correction (supersedes 7931d81 candidate assets)
+
+The final 7931d81 arm64 actual hardware run produced a valid 4.2 s MP4 with audible decoded microphone PCM, but inspection found a 333 ms video timestamp gap (audio gap ~0, end difference 27 ms). Do not count that run as full hardware acceptance. Source retention worked: its private original is local under `work/arm64-hardware/private-original.mov` and no private media is uploaded.
+
+Fixed native export to emit an explicit continuous 30 fps pixel-buffer clock, holding the last camera frame when input frames arrive late, while preserving audio timing and total duration. This cannot recover camera frames that were never captured; it prevents gaps in the output timestamp stream. Added a synthetic source with seven deliberately missing frames and required all 30 output frames and evenly spaced PTS after export. All native source/recovery/localization checks passed. Rebuild the clean successor, replace only this session's newly created draft candidate assets, and rerun final package + real hardware evidence before human acceptance.

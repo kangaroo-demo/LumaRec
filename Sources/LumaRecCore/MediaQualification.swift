@@ -36,6 +36,12 @@ public enum MediaQualification {
         try await NativeExporter.export(input: fourByThree, output: cropped, configuration: ExportConfiguration())
         try await verify(cropped, portrait: false, audio: false, mixed: false)
         evidence.append("PASS: actual 4:3 source exports with all four frame corners filled, no added black borders")
+        let dropped = directory.appendingPathComponent("synthetic-dropped-frames.mov")
+        let continuous = directory.appendingPathComponent("continuous-30fps.mp4")
+        try await makeVideo(at: dropped, skipFrames: true)
+        try await NativeExporter.export(input: dropped, output: continuous, configuration: ExportConfiguration())
+        try await verify(continuous, portrait: false, audio: false, mixed: false)
+        evidence.append("PASS: dropped input frames are held on a continuous 30fps output clock without changing duration")
         let missingAudio = directory.appendingPathComponent("missing-audio.mp4")
         var missingAudioRejected = false
         do {
@@ -71,7 +77,7 @@ public enum MediaQualification {
         return evidence
     }
 
-    private static func makeVideo(at url: URL, width: Int = 640, height: Int = 360) async throws {
+    private static func makeVideo(at url: URL, width: Int = 640, height: Int = 360, skipFrames: Bool = false) async throws {
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: width, AVVideoHeightKey: height
@@ -84,6 +90,7 @@ public enum MediaQualification {
         try require(writer.startWriting(), "Cannot start synthetic writer")
         writer.startSession(atSourceTime: .zero)
         for frame in 0..<30 {
+            if skipFrames && (5..<12).contains(frame) { continue }
             while !input.isReadyForMoreMediaData {
                 try require(writer.status == .writing, "Synthetic video writer failed")
                 try await Task.sleep(nanoseconds: 1_000_000)
@@ -155,7 +162,11 @@ public enum MediaQualification {
         reader.add(pixels)
         try require(reader.startReading(), "Cannot decode MP4 video")
         var frameCount = 0
+        var previousPTS: Double?
         while let sample = pixels.copyNextSampleBuffer() {
+            let pts = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+            if let previousPTS { try require(abs(pts - previousPTS - 1.0 / 30) < 0.001, "Output video timestamps are not continuous at 30fps") }
+            previousPTS = pts
             if frameCount == 0, let buffer = CMSampleBufferGetImageBuffer(sample) {
                 CVPixelBufferLockBaseAddress(buffer, .readOnly)
                 defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
@@ -172,7 +183,7 @@ public enum MediaQualification {
             }
             frameCount += 1
         }
-        try require(reader.status == .completed && frameCount >= 29, "Video does not fully decode")
+        try require(reader.status == .completed && frameCount == 30, "Video does not fully decode")
         let audios = try await asset.loadTracks(withMediaType: .audio)
         try require(audios.count == (audio ? 1 : 0), "Wrong output audio count")
         guard audio else { return }

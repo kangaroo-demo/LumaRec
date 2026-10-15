@@ -24,7 +24,7 @@ jobs:
         run: ./scripts/verify-package.sh "$PWD/dist/LumaRec-1.0.0-macOS-arm64.zip" "$RUNNER_TEMP/zip-evidence"
       - uses: actions/upload-artifact@v4
         with:
-          name: LumaRec-macOS-arm64-${{ matrix.os }}-candidate
+          name: LumaRec-macOS-arm64-candidate
           path: |
             dist/*.zip
             dist/*.dmg

@@ -99,7 +99,12 @@ public enum NativeExporter {
             writer.add(audioInput)
             streams.append((audioOutput, audioInput))
         }
-        try await encode(reader: reader, writer: writer, streams: streams)
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: videoInput, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: Int(size.width), kCVPixelBufferHeightKey as String: Int(size.height)
+        ])
+        let videoPump = VideoFramePump(output: videoOutput, adaptor: adaptor, duration: duration)
+        try await encode(reader: reader, writer: writer, streams: streams, videoPump: videoPump, duration: duration)
         let result = AVURLAsset(url: partial)
         let resultDuration = try await result.load(.duration)
         let resultVideo = try await result.loadTracks(withMediaType: .video)
@@ -124,9 +129,9 @@ public enum NativeExporter {
     }
 
     private static func encode(reader: AVAssetReader, writer: AVAssetWriter,
-                               streams: [(AVAssetReaderOutput, AVAssetWriterInput)]) async throws {
+                               streams: [(AVAssetReaderOutput, AVAssetWriterInput)], videoPump: VideoFramePump, duration: CMTime) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let job = EncodingJob(reader: reader, writer: writer, streams: streams, continuation: continuation)
+            let job = EncodingJob(reader: reader, writer: writer, streams: streams, videoPump: videoPump, duration: duration, continuation: continuation)
             job.start()
         }
     }
@@ -140,13 +145,16 @@ private final class EncodingJob {
     let reader: AVAssetReader
     let writer: AVAssetWriter
     let streams: [(AVAssetReaderOutput, AVAssetWriterInput)]
+    let videoPump: VideoFramePump
+    let duration: CMTime
     let queue = DispatchQueue(label: "com.kangaroo-demo.LumaRec.export")
     var remaining: Int
     var finished = false
     let continuation: CheckedContinuation<Void, Error>
 
     init(reader: AVAssetReader, writer: AVAssetWriter, streams: [(AVAssetReaderOutput, AVAssetWriterInput)],
-         continuation: CheckedContinuation<Void, Error>) {
+         videoPump: VideoFramePump, duration: CMTime, continuation: CheckedContinuation<Void, Error>) {
+        self.videoPump = videoPump; self.duration = duration
         self.reader = reader; self.writer = writer; self.streams = streams
         self.remaining = streams.count; self.continuation = continuation
     }
@@ -160,15 +168,23 @@ private final class EncodingJob {
             input.requestMediaDataWhenReady(on: queue) { [self] in
                 guard !finished, !ended else { return }
                 while input.isReadyForMoreMediaData {
-                    if let sample = output.copyNextSampleBuffer() {
-                        guard input.append(sample) else { fail(writer.error); return }
-                    } else {
+                    let hasSample: Bool
+                    do {
+                        if input.mediaType == .video {
+                            hasSample = try videoPump.appendNext()
+                        } else if let sample = output.copyNextSampleBuffer() {
+                            guard input.append(sample) else { fail(writer.error); return }
+                            hasSample = true
+                        } else { hasSample = false }
+                    } catch { fail(error); return }
+                    if !hasSample {
                         ended = true
                         input.markAsFinished()
                         if reader.status == .failed || reader.status == .cancelled { fail(reader.error); return }
                         remaining -= 1
                         if remaining == 0 {
                             finished = true
+                            writer.endSession(atSourceTime: duration)
                             writer.finishWriting { [self] in
                                 if writer.status == .completed { continuation.resume() }
                                 else { continuation.resume(throwing: writer.error ?? NativeExporter.failure("Native MP4 encoding failed.")) }
@@ -187,5 +203,44 @@ private final class EncodingJob {
         reader.cancelReading()
         writer.cancelWriting()
         continuation.resume(throwing: error ?? NativeExporter.failure("Native MP4 encoding failed."))
+    }
+}
+
+/// Resample the camera's variable frame arrivals onto the export clock, without shifting audio.
+/// Missing frames hold the last image; they cannot introduce a hole in the MP4 timeline.
+private final class VideoFramePump {
+    let output: AVAssetReaderOutput
+    let adaptor: AVAssetWriterInputPixelBufferAdaptor
+    let frameCount: Int64
+    var frame: Int64 = 0
+    var current: CMSampleBuffer?
+    var next: CMSampleBuffer?
+    var initialized = false
+
+    init(output: AVAssetReaderOutput, adaptor: AVAssetWriterInputPixelBufferAdaptor, duration: CMTime) {
+        self.output = output; self.adaptor = adaptor
+        frameCount = Int64(ceil(duration.seconds * 30))
+    }
+
+    func appendNext() throws -> Bool {
+        guard frame < frameCount else { return false }
+        if !initialized {
+            current = output.copyNextSampleBuffer()
+            next = output.copyNextSampleBuffer()
+            initialized = true
+        }
+        let time = CMTime(value: frame, timescale: 30)
+        while let upcoming = next, CMTimeCompare(CMSampleBufferGetPresentationTimeStamp(upcoming), time) <= 0 {
+            current = upcoming
+            next = output.copyNextSampleBuffer()
+        }
+        guard let sample = current, let image = CMSampleBufferGetImageBuffer(sample) else {
+            throw NativeExporter.failure("The source recording has no playable video.")
+        }
+        guard adaptor.append(image, withPresentationTime: time) else {
+            throw NativeExporter.failure("Native MP4 encoding failed.")
+        }
+        frame += 1
+        return true
     }
 }
